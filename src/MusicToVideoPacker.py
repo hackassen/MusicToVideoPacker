@@ -89,9 +89,10 @@ class MusicToVideoPacker:
                 audio_chunck_duration=song.duration
                 songs=[song,]
                 clip_i+=1
+                clip = VideoFileClip.VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)            
                 
                 #tp
-                break
+                #break
             
             songs.append(song)
             audio_chunck_duration+=song.duration
@@ -106,13 +107,11 @@ class MusicToVideoPacker:
         
     def AssembleClip(self, clip, songs:list):
         audioTrack = AudioClip.CompositeAudioClip(songs)
-        # !.. close soungs
-        #for song in songs: song.close()
-        
+        #print("!!!!!!!!!!!!!!!!!!")
         clip.audio = audioTrack    
         clip = clip.subclip(0, audioTrack.duration)    
 
-        #!.. to add random suffix to clipname, to check file existance       
+        #!..  to check file existance       
         rand_prep = ''.join(random.choices(string.digits+string.ascii_uppercase, k=5))+"_"
         clip_save_name = rand_prep+os.path.basename(clip.filename)
         self.saveClip(clip, clip_save_name)
@@ -120,6 +119,9 @@ class MusicToVideoPacker:
         # adding metadata
         self.meta[clip_save_name]=[{'name':os.path.basename(song.filename), 'duration':song.duration} for song in songs]
     
+        # !.. close songs
+        for song in songs: song.close()
+
         return clip
     
     def saveClip(self, clip, flname):
