@@ -5,8 +5,8 @@ Class for packing (and unpacking) a music playlist to a video, just for some
 purposes...
  
 """
-from moviepy.video.io import *
-from moviepy.audio.io import *
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.audio import *
 from moviepy.editor import concatenate_videoclips
 import json
@@ -23,6 +23,7 @@ class MusicToVideoPacker:
     OUT_EXT = ".mp4"
     META_FILE  = "META.txt"
     VIDEO_RESOLUTION = (240,240)
+    WANTED_BITRATE = "320K"
     
     def __init__(self, VideoDir: str, AudioDir: str):
         if not os.path.isdir(VideoDir) or not os.path.isdir(AudioDir):
@@ -80,12 +81,12 @@ class MusicToVideoPacker:
         #global clip
         #global song
         songs=list()
-        clip = VideoFileClip.VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)            
+        clip = VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)            
         audio_chunck_duration = 0 
         
         for audio_file in self.audio_files:
             print("      Processing {0}\n".format(audio_file))
-            song = AudioFileClip.AudioFileClip(audio_file)
+            song = AudioFileClip(audio_file)
             songs.append(song)
             audio_chunck_duration+=song.duration
             
@@ -99,7 +100,7 @@ class MusicToVideoPacker:
                     while clip_i<len(self.video_files):
                         print(f" >> Concetating video {os.path.basename(self.video_files[clip_i])}")
                         clip_i+=1
-                        newclip = VideoFileClip.VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)
+                        newclip = VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)
                         clips_for_concat.append(newclip)
                         clips_for_concat_duration+=newclip.duration
                         if clips_for_concat_duration > song.duration: break                    
@@ -125,7 +126,7 @@ class MusicToVideoPacker:
                     clip_circle_prefix+=1
                     clip_i=0
                     
-                clip = VideoFileClip.VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)            
+                clip = VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)            
 
         #saving leftovers
         if len(songs) and  clip_i < len(self.video_files):
@@ -139,7 +140,7 @@ class MusicToVideoPacker:
         print("Packing done.")
         
     def appendRandPrefis(self, name:str):
-        return ''.join(random.choices(string.digits+string.ascii_uppercase, k=5))+"_"+name
+        return f"{self.clip_circle_prefix}"+"".join(random.choices(string.digits+string.ascii_uppercase, k=5))+"_"+name
 
     def AssembleClip(self, clip, songs:list, clipAssambleName_ = None):
         
@@ -150,7 +151,7 @@ class MusicToVideoPacker:
         #!..  to check file existance               
         clip_save_name =  clipAssambleName_ if clipAssambleName_ != None else os.path.basename(clip.filename)
         clip_save_name = self.appendRandPrefis(clip_save_name)
-            
+                    
         self.saveClip(clip, clip_save_name)
         
         # adding metadata
@@ -164,7 +165,7 @@ class MusicToVideoPacker:
     def saveClip(self, clip, flname):
 
         print(f"Saving {flname}...")        
-        clip.write_videofile(os.path.join(self.output_dir, f"{self.clip_circle_prefix}__{flname}"))        
+        clip.write_videofile(os.path.join(self.output_dir, flname), audio_bitrate = self.WANTED_BITRATE)        
         clip.close()
 
     def Unpack(self, assembly_path:str, out_path:str = "./"):        
@@ -178,14 +179,14 @@ class MusicToVideoPacker:
             print(f"  {clipnm}  - disassembling...")
             if not os.path.exists(os.path.join(assembly_path,clipnm)):
                 print("f!! Error while disassembling: {clipnm} not found")
-            clip = VideoFileClip.VideoFileClip(os.path.join(assembly_path, clipnm), audio=True)
+            clip = VideoFileClip(os.path.join(assembly_path, clipnm), audio=True)
             track = clip.audio
             t=0
             for song_meta in self.meta[clipnm]:
                 print(f"    {song_meta['name']}  - extracting...")
                 song = track.subclip(t, song_meta["duration"])
                 t+=song_meta["duration"]
-                song.write_audiofile(os.path.join(out_path, song_meta["name"]))
+                song.write_audiofile(os.path.join(out_path, song_meta["name"]), bitrate = self.WANTED_BITRATE)
                 song.close()
                 
             clip.close()
@@ -193,26 +194,15 @@ class MusicToVideoPacker:
         # ! ... may be add songs hash check
         print("Disassembling done.")    
                                 
-            
-#from moviepy import VideoFileClip, concatenate_videoclips
-#clip1 = VideoFileClip("myvideo.mp4")
-#final_clip.resize(width=480)
-#.write_videofile("my_stack.mp4")
 
 if __name__=="__main__":
-    #video_dir = r"/home/hackassen/Downloads/movies/[Udemy] Python Programming Machine Learning, Deep Learning (05.2021)/"
-    #audio_dir =r"/home/hackassen/homehackassenDownloadsyndMusic/"
-
-    video_dir = r"/home/hackassen/works/MusicPacker/src/tp/"
-    audio_dir =r"/home/hackassen/works/MusicPacker/src/tpA/"
+    video_dir = r"/home/hackassen/Downloads/movies/[Udemy] Python Programming Machine Learning, Deep Learning (05.2021)/"
+    audio_dir =r"/home/hackassen/works/MusicPacker/data/in/"
+    packed_path = r"/home/hackassen/works/MusicPacker/data/packed/"
 
     packer = MusicToVideoPacker(video_dir, audio_dir)
-    packer.list_videos()    
-    packer.list_audios()    
-    #packer.Pack()
-    
-    
-    packed_path = r"/home/hackassen/works/MusicPacker/data/"
-    output_path = r"/home/hackassen/tp/"
+    packer.Pack(output_path=packed_path)
+        
+    output_path = r"/home/hackassen/works/MusicPacker/data/out/"
     packer.Unpack(packed_path, output_path)
     
