@@ -14,8 +14,9 @@ import json
 import os, string, random, pathlib
 
 class MusicToVideoPacker:
-    # some descr
-   
+    ''' Class for packing (and unpacking) a music playlist to a video.
+    '''
+    
     VIDEO_FILE_TYPES = [".mp4",]    
     AUDIO_FILE_TYPES = [".mp3",] 
     DATA_DIR = "../data/"
@@ -32,7 +33,8 @@ class MusicToVideoPacker:
         self.audio_files = list()
         self.video_files = list()
         self.meta = {}        
-        self.output_dir = self.DATA_DIR+"PACKED"+self.OUT_EXT
+        self.output_dir = self.DATA_DIR
+        self.clip_circle_prefix=0
         
     def list_videos(self, verb=False):
         if verb: print(f"Searching video files in '{self.video_dir}' ...\n")
@@ -48,7 +50,7 @@ class MusicToVideoPacker:
         
     def dir_traverse(self, directory:str, filter_types:list, results:list, verb=False):
         for fl in os.listdir(directory):
-            fl_path = directory+"/"+fl
+            fl_path = os.path.join(directory, fl)
             if os.path.isdir(fl_path):
                 #print("     - DIR")
                 self.dir_traverse(fl_path, filter_types, results)
@@ -56,7 +58,7 @@ class MusicToVideoPacker:
                 if verb: print(f"   {fl}")
                 results.append(fl_path)
             
-    def Pack(self, output_path:str=self.DATA_DIR):
+    def Pack(self, output_path=None):
         print("Packing ...")
         
         if not os.path.exists(self.DATA_DIR):
@@ -66,12 +68,15 @@ class MusicToVideoPacker:
             print(" Retrieving files to pack...")
             self.list_videos()    
             self.list_audios()    
+        
+        self.output_dir=output_path if not output_path is None else self.DATA_DIR
             
         if len(self.audio_files)<1 or len(self.video_files)<1:
             print("! Error. No audio or video files found.")
             return
         
         clip_i=0
+        self.clip_circle_prefix=0
         #global clip
         #global song
         songs=list()
@@ -110,18 +115,25 @@ class MusicToVideoPacker:
                 else: # len(songs) > 1
                                 
                     #assembling songs and clip
-                    assembledClip = self.AssembleClip(clip, songs[-1])
+                    assembledClip = self.AssembleClip(clip, songs[:-1])
                     audio_chunck_duration=song.duration
                     songs=[song,]
                 clip_i+=1
                 if clip_i >= len(self.video_files):
-                    print(" ! Video files ended! Quiting.")
-                    break
+                    #print(" ! Video files ended! Quiting.")
+                    #break
+                    clip_circle_prefix+=1
+                    clip_i=0
+                    
                 clip = VideoFileClip.VideoFileClip(self.video_files[clip_i], audio=False, target_resolution=self.VIDEO_RESOLUTION)            
+
+        #saving leftovers
+        if len(songs) and  clip_i < len(self.video_files):
+            self.AssembleClip(clip, songs)
             
         #saving metadata
         print("Saving metadata.")
-        with open(self.DATA_DIR+self.META_FILE, "w") as fl:
+        with open(os.path.join(self.output_dir, self.META_FILE), "w") as fl:
             fl.write(json.JSONEncoder().encode(self.meta))
             
         print("Packing done.")
@@ -132,12 +144,11 @@ class MusicToVideoPacker:
     def AssembleClip(self, clip, songs:list, clipAssambleName_ = None):
         
         audioTrack = AudioClip.CompositeAudioClip(songs)
-        #print("!!!!!!!!!!!!!!!!!!")
         clip.audio = audioTrack    
         clip = clip.subclip(0, audioTrack.duration)    
 
         #!..  to check file existance               
-        clip_save_name =  clipAssambleName_ if clipAssambleName_ != None else clip.filename
+        clip_save_name =  clipAssambleName_ if clipAssambleName_ != None else os.path.basename(clip.filename)
         clip_save_name = self.appendRandPrefis(clip_save_name)
             
         self.saveClip(clip, clip_save_name)
@@ -153,34 +164,34 @@ class MusicToVideoPacker:
     def saveClip(self, clip, flname):
 
         print(f"Saving {flname}...")        
-        clip.write_videofile(f"{self.DATA_DIR}{flname}")        
+        clip.write_videofile(os.path.join(self.output_dir, f"{self.clip_circle_prefix}__{flname}"))        
         clip.close()
 
     def Unpack(self, assembly_path:str, out_path:str = "./"):        
-        if not os.path.exists(assembly_path+"/"+self.META_FILE):
+        if not os.path.exists(os.path.join(assembly_path, self.META_FILE)):
             raise Exception("Invalid path to assembly. Please specify path containing 'META.txt'")
         
-        with open(assembly_path+"/"+self.META_FILE, "r")as fl:
+        with open(os.path.join(assembly_path, self.META_FILE), "r")as fl:
             self.meta=json.load(fl)
             
         for clipnm in self.meta:
             print(f"  {clipnm}  - disassembling...")
-            if not os.path.exists(assembly_path+"/"+clipnm):
+            if not os.path.exists(os.path.join(assembly_path,clipnm)):
                 print("f!! Error while disassembling: {clipnm} not found")
-            clip = VideoFileClip.VideoFileClip(assembly_path+"/"+clipnm, audio=True)
+            clip = VideoFileClip.VideoFileClip(os.path.join(assembly_path, clipnm), audio=True)
             track = clip.audio
             t=0
             for song_meta in self.meta[clipnm]:
                 print(f"    {song_meta['name']}  - extracting...")
                 song = track.subclip(t, song_meta["duration"])
                 t+=song_meta["duration"]
-                song.write_audiofile(out_path+"/"+song_meta["name"])
+                song.write_audiofile(os.path.join(out_path, song_meta["name"]))
                 song.close()
                 
             clip.close()
             
         # ! ... may be add songs hash check
-        print("Disassembling done.")
+        print("Disassembling done.")    
                                 
             
 #from moviepy import VideoFileClip, concatenate_videoclips
